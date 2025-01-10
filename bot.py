@@ -104,8 +104,8 @@ async def handle_assistant_selection(callback_query: CallbackQuery):
     if selected_assistant:
         await callback_query.message.edit_text(
             f"Вы выбрали ассистента: {selected_assistant['name']}."
-            f"Описание: {selected_assistant['description']}"
-            "Теперь вы можете задать ваш вопрос."
+            f"\nОписание: {selected_assistant['description']}"
+            "\nТеперь вы можете задать ваш вопрос."
         )
     else:
         await callback_query.message.edit_text("Произошла ошибка при выборе ассистента. Попробуйте еще раз.")
