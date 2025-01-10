@@ -77,8 +77,10 @@ async def handle_message(message: Message):
 
     try:
         # Stream responses back to the user
-        async for response in ask_assistant_bot(question, user_id, username, message):
-            await message.answer(response, disable_web_page_preview=True)
+        response_generator = ask_assistant_bot(question, user_id, username, message)
+        # Collect responses from the async generator
+        async for partial_response in response_generator:
+            await message.answer(partial_response, disable_web_page_preview=True)
     except Exception as e:
         # Handle exceptions and notify the user
         await message.answer(f"An error occurred: {str(e)}")

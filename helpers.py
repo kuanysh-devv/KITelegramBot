@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 
@@ -147,39 +148,77 @@ async def ask_assistant_bot(question: str, user_id: int, username: str, message:
                      "questions from database."
     )
 
-    if run.status == 'completed':
-        messages_page = client.beta.threads.messages.list(thread_id=thread.id)
-        messages = messages_page.data
-        assistant_responses = [message for message in messages if message.role == "assistant"]
+    retries = 0
+    max_retries = 3
+    while retries < max_retries:
+        try:
+            if run.status == 'completed':
+                messages_page = client.beta.threads.messages.list(thread_id=thread.id)
+                assistant_responses = [
+                    message for message in messages_page.data if message.role == "assistant"
+                ]
 
-        if assistant_responses:
-            last_response = assistant_responses[0]
-            message_content = last_response.content[0].text
-            annotations = message_content.annotations
-            citations = {}
+                if assistant_responses:
+                    last_response = assistant_responses[0]
+                    message_content = last_response.content[0].text
+                    annotations = message_content.annotations
+                    citations = {}
 
-            # Group annotations by their text and track their indices
-            for index, annotation in enumerate(annotations):
-                annotation_text = annotation.text
-                print(annotation_text)
-                # Group indices of repeated annotations
-                if annotation_text not in citations:
-                    citations[annotation_text] = []
-                citations[annotation_text].append(index + 1)
+                    # Group annotations by their text and track their indices
+                    for index, annotation in enumerate(annotations):
+                        annotation_text = annotation.text
+                        print(annotation_text)
+                        # Group indices of repeated annotations
+                        if annotation_text not in citations:
+                            citations[annotation_text] = []
+                        citations[annotation_text].append(index + 1)
 
-                # Replace annotation text with placeholder for later citation
-                message_content.value = message_content.value.replace(annotation_text, f' [{index + 1}]')
+                        # Replace annotation text with placeholder for later citation
+                        message_content.value = message_content.value.replace(annotation_text, f' [{index + 1}]')
 
-            print(message_content.value)
-            # Prepare citation format for repeated annotations
-            formatted_citations = []
-            for annotation_text, indices in citations.items():
-                indices_str = ''.join([f'[{i}]' for i in indices])
-                formatted_citations.append(f'{indices_str} {annotation_text}')
-            print(formatted_citations)
-            # Combine message content with citations
-            message_with_citations = message_content.value + '\n\n' + '\n'.join(formatted_citations)
-            log_interaction(username, question, message_with_citations)
-            yield message_with_citations
-    else:
-        raise Exception(f"Произошла ошибка. Попробуйте еще раз. ")
+                    print(message_content.value)
+                    # Prepare citation format for repeated annotations
+                    formatted_citations = []
+                    for annotation_text, indices in citations.items():
+                        indices_str = ''.join([f'[{i}]' for i in indices])
+                        formatted_citations.append(f'{indices_str} {annotation_text}')
+                    print(formatted_citations)
+                    # Combine message content with citations
+                    message_with_citations = message_content.value + '\n\n' + '\n'.join(formatted_citations)
+                    log_interaction(username, question, message_with_citations)
+                    yield message_with_citations
+                    return  # Exit the function after successful execution
+            else:
+                raise Exception("Произошла ошибка. Попробуйте еще раз.")
+        except Exception as e:
+            retries += 1
+            print(f"Retry {retries}/{max_retries} due to error: {e}")
+            if retries < max_retries:
+                await asyncio.sleep(2 ** retries)  # Exponential backoff
+            else:
+                raise Exception("Maximum retry attempts reached. Please try again later.") from e
+
+
+def process_annotations(annotations_list):
+    """
+    Process annotations to group them by text and prepare citations.
+    Returns a tuple of the updated message content and formatted citations.
+    """
+    citations = {}
+    message_content_value = annotations_list[0].message.content.value
+
+    for index, annotation in enumerate(annotations_list):
+        annotation_text = annotation.text
+        if annotation_text not in citations:
+            citations[annotation_text] = []
+        citations[annotation_text].append(index + 1)
+
+        # Replace annotation text with placeholder for later citation
+        message_content_value = message_content_value.replace(annotation_text, f' [{index + 1}]')
+
+    # Prepare citation format for repeated annotations
+    formatted_citations = [
+        f"{''.join([f'[{i}]' for i in indices])} {text}" for text, indices in citations.items()
+    ]
+
+    return message_content_value, formatted_citations
