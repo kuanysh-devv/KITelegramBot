@@ -5,3 +5,4 @@ services:
       context: .  # Path bot directory
     env_file:
       - .env  # Reference the .env file for environment variables
+    restart: always
