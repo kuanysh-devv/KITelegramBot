@@ -1,4 +1,3 @@
-.env
 .venv
 venv
 .idea
@@ -7,3 +6,4 @@ venv
 __pycache__
 __pycache__/
 __pycache__/*
+logs.json
